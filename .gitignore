@@ -1,0 +1,11 @@
+node_modules/
+*.log
+dist/
+.DS_Store
+.env
+.idea/
+.vscode/
+
+# Тестовые артефакты
+test-images/
+test-output/
