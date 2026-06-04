@@ -9,3 +9,6 @@ dist/
 # Тестовые артефакты
 test-images/
 test-output/
+
+# Рабочая папка с картинками
+images/

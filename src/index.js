@@ -16,6 +16,7 @@ import chalk from 'chalk';
 const stats = {
   total: 0,
   converted: 0,
+  copied: 0,
   skipped: 0,
   errors: 0,
   bytesBefore: 0,
@@ -88,7 +89,9 @@ async function collectImages(dir, extensions) {
     try {
       entries = await fs.readdir(current, { withFileTypes: true });
     } catch (err) {
-      await logError(`Не удалось прочитать директорию ${current}: ${err.message}`);
+      await logError(
+        `Не удалось прочитать директорию ${current}: ${err.message}`,
+      );
       return;
     }
 
@@ -101,6 +104,39 @@ async function collectImages(dir, extensions) {
         if (extensions.has(ext)) {
           result.push(full);
         }
+      }
+    }
+  }
+
+  await walk(dir);
+  return result;
+}
+
+/**
+ * Собирает все файлы (без фильтра по расширениям) рекурсивно.
+ * @param {string} dir
+ * @returns {Promise<string[]>}
+ */
+async function collectAllFiles(dir) {
+  const result = [];
+
+  async function walk(current) {
+    let entries;
+    try {
+      entries = await fs.readdir(current, { withFileTypes: true });
+    } catch (err) {
+      await logError(
+        `Не удалось прочитать директорию ${current}: ${err.message}`,
+      );
+      return;
+    }
+
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile()) {
+        result.push(full);
       }
     }
   }
@@ -132,6 +168,18 @@ function resolveOutputPath(sourceFile, inputRoot, outputRoot) {
   const relativeDir = path.relative(inputRoot, parsed.dir);
   const targetDir = path.join(outputRoot, relativeDir);
   return path.join(targetDir, `${parsed.name}.webp`);
+}
+
+/**
+ * Путь для копирования не-конвертируемого файла в выходную директорию.
+ * Если outputRoot === null, возвращает null.
+ */
+function resolveCopyPath(sourceFile, inputRoot, outputRoot) {
+  if (!outputRoot) return null;
+  const parsed = path.parse(sourceFile);
+  const relativeDir = path.relative(inputRoot, parsed.dir);
+  const targetDir = path.join(outputRoot, relativeDir);
+  return path.join(targetDir, parsed.base);
 }
 
 /**
@@ -190,7 +238,9 @@ async function convertFile(sourceFile, targetFile, opts) {
         try {
           await fs.unlink(sourceFile);
         } catch (err) {
-          await logError(`Не удалось удалить оригинал ${sourceFile}: ${err.message}`);
+          await logError(
+            `Не удалось удалить оригинал ${sourceFile}: ${err.message}`,
+          );
         }
       }
     }
@@ -210,21 +260,46 @@ function parseArgs() {
 
   program
     .name('png-to-webp')
-    .description('Рекурсивная конвертация изображений в WebP с использованием sharp')
+    .description(
+      'Рекурсивная конвертация изображений в WebP с использованием sharp',
+    )
     .requiredOption('-i, --input <path>', 'путь к папке с изображениями')
-    .option('-o, --output <path>', 'путь к выходной папке (по умолчанию рядом с оригиналом)')
-    .option('-q, --quality <number>', 'качество сжатия 1-100', (v) => parseInt(v, 10), 80)
+    .option(
+      '-o, --output <path>',
+      'путь к выходной папке (по умолчанию рядом с оригиналом)',
+    )
+    .option(
+      '-q, --quality <number>',
+      'качество сжатия 1-100',
+      (v) => parseInt(v, 10),
+      80,
+    )
     .option('--lossless', 'режим сжатия без потерь', false)
-    .option('-e, --effort <number>', 'уровень компрессии 0-6', (v) => parseInt(v, 10), 4)
-    .option('--keep-original [bool]', 'сохранять оригиналы (true/false)', 'true')
-    .option('--skip-existing [bool]', 'пропускать уже сконвертированные (true/false)', 'true')
+    .option(
+      '-e, --effort <number>',
+      'уровень компрессии 0-6',
+      (v) => parseInt(v, 10),
+      4,
+    )
+    .option(
+      '--keep-original [bool]',
+      'сохранять оригиналы (true/false)',
+      'true',
+    )
+    .option(
+      '--skip-existing [bool]',
+      'пропускать уже сконвертированные (true/false)',
+      'true',
+    )
     .option(
       '--formats <list>',
       'список расширений через запятую',
       'jpg,jpeg,png,gif,tiff,bmp,avif',
     )
-    .option('--max-width <number>', 'максимальная ширина в пикселях (с сохранением пропорций)', (v) =>
-      parseInt(v, 10),
+    .option(
+      '--max-width <number>',
+      'максимальная ширина в пикселях (с сохранением пропорций)',
+      (v) => parseInt(v, 10),
     )
     .option(
       '-c, --concurrency <number>',
@@ -252,7 +327,10 @@ function parseArgs() {
   if (!Number.isFinite(o.effort) || o.effort < 0 || o.effort > 6) {
     throw new Error('effort должен быть числом 0-6');
   }
-  if (o.maxWidth !== undefined && (!Number.isFinite(o.maxWidth) || o.maxWidth < 1)) {
+  if (
+    o.maxWidth !== undefined &&
+    (!Number.isFinite(o.maxWidth) || o.maxWidth < 1)
+  ) {
     throw new Error('max-width должен быть положительным числом');
   }
   if (!Number.isFinite(o.concurrency) || o.concurrency < 1) {
@@ -285,27 +363,39 @@ function parseArgs() {
 function printSummary() {
   const elapsed = performance.now() - stats.startTime;
   const saved = stats.bytesBefore - stats.bytesAfter;
-  const savedPct = stats.bytesBefore > 0 ? (saved / stats.bytesBefore) * 100 : 0;
+  const savedPct =
+    stats.bytesBefore > 0 ? (saved / stats.bytesBefore) * 100 : 0;
 
   console.log('');
-  console.log(chalk.bold.cyan('━━━━━━━━━━━━━━━━━━━━ Итоги ━━━━━━━━━━━━━━━━━━━━'));
+  console.log(
+    chalk.bold.cyan('━━━━━━━━━━━━━━━━━━━━ Итоги ━━━━━━━━━━━━━━━━━━━━'),
+  );
   console.log(`${chalk.bold('Всего файлов:')}      ${stats.total}`);
   console.log(`${chalk.green('✓ Сконвертировано:')} ${stats.converted}`);
+  console.log(`${chalk.blue('● Скопировано:')}     ${stats.copied}`);
   console.log(`${chalk.yellow('⊘ Пропущено:')}       ${stats.skipped}`);
   console.log(`${chalk.red('✗ Ошибок:')}          ${stats.errors}`);
   console.log('');
-  console.log(`${chalk.bold('Размер до:')}    ${formatBytes(stats.bytesBefore)}`);
-  console.log(`${chalk.bold('Размер после:')} ${formatBytes(stats.bytesAfter)}`);
+  console.log(
+    `${chalk.bold('Размер до:')}    ${formatBytes(stats.bytesBefore)}`,
+  );
+  console.log(
+    `${chalk.bold('Размер после:')} ${formatBytes(stats.bytesAfter)}`,
+  );
   if (stats.bytesBefore > 0) {
     const color = savedPct >= 0 ? chalk.green : chalk.red;
-    console.log(`${chalk.bold('Экономия:')}     ${color(`${formatBytes(saved)} (${savedPct.toFixed(2)}%)`)}`);
+    console.log(
+      `${chalk.bold('Экономия:')}     ${color(`${formatBytes(saved)} (${savedPct.toFixed(2)}%)`)}`,
+    );
   }
   console.log(`${chalk.bold('Время:')}        ${formatDuration(elapsed)}`);
   if (stats.errors > 0) {
     console.log('');
     console.log(chalk.red(`Подробности ошибок записаны в ${errorLogPath}`));
   }
-  console.log(chalk.bold.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'));
+  console.log(
+    chalk.bold.cyan('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'),
+  );
 }
 
 /**
@@ -326,43 +416,58 @@ async function main() {
   try {
     inputStat = await fs.stat(args.input);
   } catch (err) {
-    console.error(chalk.red(`✗ Входная директория недоступна: ${args.input} (${err.message})`));
+    console.error(
+      chalk.red(
+        `✗ Входная директория недоступна: ${args.input} (${err.message})`,
+      ),
+    );
     process.exit(1);
   }
   if (!inputStat.isDirectory()) {
-    console.error(chalk.red(`✗ Входной путь не является директорией: ${args.input}`));
+    console.error(
+      chalk.red(`✗ Входной путь не является директорией: ${args.input}`),
+    );
     process.exit(1);
   }
 
   console.log(chalk.bold.cyan('🚀 Конвертация изображений в WebP'));
   console.log(`${chalk.bold('Вход:')}        ${args.input}`);
-  console.log(`${chalk.bold('Выход:')}       ${args.output ?? chalk.dim('(рядом с оригиналами)')}`);
+  console.log(
+    `${chalk.bold('Выход:')}       ${args.output ?? chalk.dim('(рядом с оригиналами)')}`,
+  );
   console.log(
     `${chalk.bold('Параметры:')}   quality=${args.quality}, lossless=${args.lossless}, effort=${args.effort}` +
       `${args.maxWidth ? `, maxWidth=${args.maxWidth}` : ''}`,
   );
-  console.log(
-    `${chalk.bold('Форматы:')}     ${[...args.formats].join(', ')}`,
-  );
+  console.log(`${chalk.bold('Форматы:')}     ${[...args.formats].join(', ')}`);
   console.log(
     `${chalk.bold('Поведение:')}   keepOriginal=${args.keepOriginal}, skipExisting=${args.skipExisting}, concurrency=${args.concurrency}`,
   );
   console.log('');
 
   console.log(chalk.dim('Сканирую файлы...'));
-  const files = await collectImages(args.input, args.formats);
-  stats.total = files.length;
+  const allFiles = await collectAllFiles(args.input);
+  const files = allFiles.filter((f) =>
+    args.formats.has(path.extname(f).toLowerCase()),
+  );
+  const nonConvertible = allFiles.filter(
+    (f) => !args.formats.has(path.extname(f).toLowerCase()),
+  );
+  stats.total = allFiles.length;
 
-  if (files.length === 0) {
-    console.log(chalk.yellow('⊘ Подходящих изображений не найдено.'));
-    return;
+  console.log(
+    chalk.green(`✓ Найдено изображений для конвертации: ${files.length}`),
+  );
+  if (nonConvertible.length > 0) {
+    console.log(
+      chalk.dim(`● Файлов не подлежащих конвертации: ${nonConvertible.length}`),
+    );
   }
-
-  console.log(chalk.green(`✓ Найдено файлов: ${files.length}`));
   console.log('');
 
   stats.startTime = performance.now();
 
+  const totalWork = files.length + (args.output ? nonConvertible.length : 0);
   const bar = new cliProgress.SingleBar(
     {
       format:
@@ -382,7 +487,7 @@ async function main() {
     cliProgress.Presets.shades_classic,
   );
 
-  bar.start(files.length, 0, {
+  bar.start(totalWork, 0, {
     filename: '',
     rate: '0.00',
     etaFormatted: '--:--',
@@ -390,47 +495,106 @@ async function main() {
 
   const limit = pLimit(args.concurrency);
 
-  const tasks = files.map((file) =>
-    limit(async () => {
-      if (interrupted) return;
-      const target = resolveOutputPath(file, args.input, args.output);
-      const relName = path.relative(args.input, file);
+  const tasks = [];
 
-      const result = await convertFile(file, target, {
-        quality: args.quality,
-        lossless: args.lossless,
-        effort: args.effort,
-        maxWidth: args.maxWidth,
-        skipExisting: args.skipExisting,
-        keepOriginal: args.keepOriginal,
-      });
+  // Конвертация изображений
+  for (const file of files) {
+    tasks.push(
+      limit(async () => {
+        if (interrupted) return;
+        const target = resolveOutputPath(file, args.input, args.output);
+        const relName = path.relative(args.input, file);
 
-      stats.bytesBefore += result.sizeBefore;
-      stats.bytesAfter += result.sizeAfter;
+        const result = await convertFile(file, target, {
+          quality: args.quality,
+          lossless: args.lossless,
+          effort: args.effort,
+          maxWidth: args.maxWidth,
+          skipExisting: args.skipExisting,
+          keepOriginal: args.keepOriginal,
+        });
 
-      if (result.status === 'converted') {
-        stats.converted += 1;
-      } else if (result.status === 'skipped') {
-        stats.skipped += 1;
-      } else if (result.status === 'error') {
-        stats.errors += 1;
-        await logError(`Ошибка ${file}: ${result.error?.stack ?? result.error?.message ?? result.error}`);
-      }
+        stats.bytesBefore += result.sizeBefore;
+        stats.bytesAfter += result.sizeAfter;
 
-      const elapsedSec = (performance.now() - stats.startTime) / 1000;
-      const processed = stats.converted + stats.skipped + stats.errors;
-      const rate = elapsedSec > 0 ? (processed / elapsedSec).toFixed(2) : '0.00';
-      const remaining = files.length - processed;
-      const etaSec = elapsedSec > 0 && processed > 0 ? (remaining * elapsedSec) / processed : 0;
-      const etaFormatted = etaSec > 0 ? formatDuration(etaSec * 1000) : '--:--';
+        if (result.status === 'converted') {
+          stats.converted += 1;
+        } else if (result.status === 'skipped') {
+          stats.skipped += 1;
+        } else if (result.status === 'error') {
+          stats.errors += 1;
+          await logError(
+            `Ошибка ${file}: ${result.error?.stack ?? result.error?.message ?? result.error}`,
+          );
+        }
 
-      bar.increment(1, {
-        filename: relName.length > 50 ? `…${relName.slice(-49)}` : relName,
-        rate,
-        etaFormatted,
-      });
-    }),
-  );
+        const elapsedSec = (performance.now() - stats.startTime) / 1000;
+        const processed =
+          stats.converted + stats.skipped + stats.errors + stats.copied;
+        const rate =
+          elapsedSec > 0 ? (processed / elapsedSec).toFixed(2) : '0.00';
+        const remaining = totalWork - processed;
+        const etaSec =
+          elapsedSec > 0 && processed > 0
+            ? (remaining * elapsedSec) / processed
+            : 0;
+        const etaFormatted =
+          etaSec > 0 ? formatDuration(etaSec * 1000) : '--:--';
+
+        bar.increment(1, {
+          filename: relName.length > 50 ? `…${relName.slice(-49)}` : relName,
+          rate,
+          etaFormatted,
+        });
+      }),
+    );
+  }
+
+  // Копирование файлов, которые не подлежат конвертации (если указан output)
+  if (args.output && nonConvertible.length > 0) {
+    for (const file of nonConvertible) {
+      tasks.push(
+        limit(async () => {
+          if (interrupted) return;
+          const target = resolveCopyPath(file, args.input, args.output);
+          const relName = path.relative(args.input, file);
+          if (!target) return;
+          try {
+            await ensureDir(path.dirname(target));
+            await fs.copyFile(file, target);
+            const st = await fs.stat(file);
+            stats.bytesBefore += st.size;
+            stats.bytesAfter += st.size;
+            stats.copied += 1;
+          } catch (err) {
+            stats.errors += 1;
+            await logError(
+              `Не удалось скопировать ${file} -> ${target}: ${err.message}`,
+            );
+          }
+
+          const elapsedSec = (performance.now() - stats.startTime) / 1000;
+          const processed =
+            stats.converted + stats.skipped + stats.errors + stats.copied;
+          const rate =
+            elapsedSec > 0 ? (processed / elapsedSec).toFixed(2) : '0.00';
+          const remaining = totalWork - processed;
+          const etaSec =
+            elapsedSec > 0 && processed > 0
+              ? (remaining * elapsedSec) / processed
+              : 0;
+          const etaFormatted =
+            etaSec > 0 ? formatDuration(etaSec * 1000) : '--:--';
+
+          bar.increment(1, {
+            filename: relName.length > 50 ? `…${relName.slice(-49)}` : relName,
+            rate,
+            etaFormatted,
+          });
+        }),
+      );
+    }
+  }
 
   await Promise.all(tasks);
   bar.stop();
@@ -454,7 +618,9 @@ process.on('SIGINT', () => {
 });
 
 main().catch(async (err) => {
-  console.error(chalk.red(`✗ Критическая ошибка: ${err.stack ?? err.message ?? err}`));
+  console.error(
+    chalk.red(`✗ Критическая ошибка: ${err.stack ?? err.message ?? err}`),
+  );
   await logError(`Критическая ошибка: ${err.stack ?? err.message ?? err}`);
   process.exit(1);
 });
