@@ -4,7 +4,7 @@
 
 ## Работа с IMR
 
-1. Положить файлы в папку `images/{folder_with_images}` (елси нет, то создать, т.к. она в `.gitignore`)
+1. Положить файлы в папку `images/{folder_with_images}` (если нет, то создать, т.к. она в `.gitignore`)
 2. ```bash
    node src/index.js -i images/{folder_with_images} -o images/{folder_with_images}-webp --quality 90 --effort 4
    ```
