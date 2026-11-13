@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WebP конвертер</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%232f6fed'/><path d='M8 22l5-7 4 5 3-3 4 5z' fill='white'/><circle cx='21' cy='11' r='2.5' fill='white'/></svg>" />
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --text: #17181c;
+    --muted: #6b7080;
+    --border: #e2e4ea;
+    --field: #f8f9fb;
+    --accent: #2f6fed;
+    --accent-text: #ffffff;
+    --accent-soft: #e8efff;
+    --ok: #1a8f4c;
+    --warn: #b7791f;
+    --err: #d23c3c;
+    --info: #3a6fd8;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px rgba(16, 24, 40, .06);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --card: #171a20;
+      --text: #e8eaf0;
+      --muted: #8e94a3;
+      --border: #2a2f39;
+      --field: #1d2129;
+      --accent: #5b8cff;
+      --accent-text: #0b0d12;
+      --accent-soft: #1c2740;
+      --ok: #3ccf7c;
+      --warn: #e6b04a;
+      --err: #ff6b6b;
+      --info: #7aa2ff;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .3);
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  main { width: 100%; max-width: 640px; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 24px;
+  }
+  .card + .card { margin-top: 16px; }
+  .section-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+  .section-title:not(:first-child) { margin-top: 24px; }
+  label.field { display: block; margin-bottom: 14px; }
+  .label { display: flex; justify-content: space-between; align-items: baseline; font-weight: 500; margin-bottom: 6px; }
+  .hint { color: var(--muted); font-size: 12px; font-weight: 400; }
+  input[type=text], input[type=number] {
+    width: 100%;
+    background: var(--field);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 11px;
+    font: inherit;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input[type=text]:focus, input[type=number]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+  .row { display: flex; gap: 8px; }
+  .row > input { flex: 1; min-width: 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
+
+  button {
+    font: inherit;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--field);
+    color: var(--text);
+    padding: 8px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-text);
+    font-weight: 600;
+    padding: 11px 18px;
+    width: 100%;
+    font-size: 15px;
+  }
+  button.primary:hover:not(:disabled) { filter: brightness(1.08); border-color: var(--accent); }
+  button.link { background: none; border: none; color: var(--accent); padding: 0; font-size: 12px; }
+
+  .slider-row { display: flex; align-items: center; gap: 12px; }
+  input[type=range] { flex: 1; accent-color: var(--accent); }
+  .slider-row input[type=number] { width: 72px; text-align: center; }
+
+  .seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { flex: 1; border: none; border-radius: 0; background: var(--field); padding: 8px 0; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed=true] { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+
+  .toggles { display: grid; gap: 10px; margin-bottom: 4px; }
+  .toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+  .toggle input { position: absolute; opacity: 0; pointer-events: none; }
+  .switch {
+    flex: none; width: 36px; height: 20px; border-radius: 10px;
+    background: var(--border); position: relative; transition: background .15s;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    border-radius: 50%; background: #fff; transition: transform .15s;
+    box-shadow: 0 1px 2px rgba(0,0,0,.25);
+  }
+  .toggle input:checked + .switch { background: var(--accent); }
+  .toggle input:checked + .switch::after { transform: translateX(16px); }
+  .toggle input:focus-visible + .switch { box-shadow: 0 0 0 3px var(--accent-soft); }
+  .warn-text { color: var(--warn); font-size: 12px; margin-top: 4px; }
+
+  details.adv { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 14px; }
+  details.adv summary { cursor: pointer; color: var(--muted); font-weight: 500; margin-bottom: 14px; }
+  .actions { margin-top: 20px; }
+  .err-box {
+    margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+    background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err);
+  }
+
+  /* Прогресс */
+  .progress { height: 10px; border-radius: 5px; background: var(--field); border: 1px solid var(--border); overflow: hidden; }
+  .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .prog-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; gap: 12px; }
+  .prog-head strong { font-size: 15px; }
+  .current { color: var(--muted); font-size: 12px; margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; }
+  @media (max-width: 520px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: var(--field); border-radius: 8px; padding: 10px 12px; }
+  .stat .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .k { font-size: 12px; color: var(--muted); }
+  .stat.ok .v { color: var(--ok); } .stat.info .v { color: var(--info); }
+  .stat.warn .v { color: var(--warn); } .stat.err .v { color: var(--err); }
+  .summary { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin-top: 16px; font-variant-numeric: tabular-nums; }
+  .summary dt { color: var(--muted); } .summary dd { margin: 0; }
+  .saved { color: var(--ok); font-weight: 600; }
+  .log { margin-top: 16px; max-height: 180px; overflow: auto; font-size: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+  .log div { display: flex; gap: 8px; padding: 2px 0; }
+  .log .st { width: 14px; flex: none; text-align: center; }
+  .log .converted .st { color: var(--ok); } .log .copied .st { color: var(--info); }
+  .log .skipped .st { color: var(--warn); } .log .error .st { color: var(--err); }
+  .log .f { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .done-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  [hidden] { display: none !important; }
+
+  /* Обзор папок */
+  dialog {
+    border: 1px solid var(--border); border-radius: 14px; padding: 0;
+    background: var(--card); color: var(--text); box-shadow: var(--shadow);
+    width: min(560px, calc(100vw - 32px));
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, .4); }
+  .dlg-head { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .dlg-head .mono { color: var(--muted); word-break: break-all; margin-top: 4px; }
+  .dlg-list { height: 340px; overflow: auto; padding: 6px; }
+  .dlg-list button {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    border: none; background: none; text-align: left; padding: 8px 12px; border-radius: 6px;
+  }
+  .dlg-list button:hover { background: var(--field); }
+  .dlg-list .empty { color: var(--muted); padding: 12px; }
+  .dlg-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+  .dlg-foot .hint { flex: 1; }
+  .dlg-foot .primary { width: auto; padding: 8px 16px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Конвертация в WebP</h1>
+  <p class="sub">Рекурсивно конвертирует картинки из папки, сохраняя структуру вложенных папок.</p>
+
+  <form class="card" id="form" autocomplete="off">
+    <p class="section-title">Папки</p>
+    <label class="field">
+      <div class="label">Исходная папка</div>
+      <div class="row">
+        <input type="text" id="input" class="mono" placeholder="/путь/к/папке" required />
+        <button type="button" id="browseBtn">Обзор…</button>
+      </div>
+    </label>
+    <label class="field">
+      <div class="label">
+        Выходная папка
+        <button type="button" class="link" id="resetOutput" hidden>сбросить</button>
+      </div>
+      <input type="text" id="output" class="mono" placeholder="исходная-папка-converted" />
+    </label>
+
+    <p class="section-title">Сжатие</p>
+    <div class="field">
+      <div class="label">Качество <span class="hint" id="qualityHint">игнорируется в режиме lossless</span></div>
+      <div class="slider-row">
+        <input type="range" id="qualityRange" min="1" max="100" />
+        <input type="number" id="quality" min="1" max="100" aria-label="Качество" />
+      </div>
+    </div>
+    <div class="field" style="margin-top:14px">
+      <div class="label">Effort <span class="hint">выше — меньше файл, но медленнее</span></div>
+      <div class="seg" id="effort" role="group" aria-label="Effort"></div>
+    </div>
+    <div class="toggles" style="margin-top:16px">
+      <label class="toggle"><span>Lossless — сжатие без потерь</span><input type="checkbox" id="lossless" /><span class="switch"></span></label>
+    </div>
+
+    <details class="adv">
+      <summary>Дополнительно</summary>
+      <div class="grid">
+        <label class="field">
+          <div class="label">Макс. ширина, px</div>
+          <input type="number" id="maxWidth" min="1" placeholder="без ограничения" />
+        </label>
+        <label class="field">
+          <div class="label">Параллельно <span class="hint" id="cpuHint"></span></div>
+          <input type="number" id="concurrency" min="1" />
+        </label>
+      </div>
+      <label class="field">
+        <div class="label">Форматы</div>
+        <input type="text" id="formats" class="mono" />
+      </label>
+      <div class="toggles">
+        <label class="toggle"><span>Пропускать уже сконвертированные</span><input type="checkbox" id="skipExisting" /><span class="switch"></span></label>
+        <label class="toggle"><span>Сохранять оригиналы</span><input type="checkbox" id="keepOriginal" /><span class="switch"></span></label>
+        <div class="warn-text" id="deleteWarn" hidden>⚠ Исходные файлы будут удалены после конвертации.</div>
+      </div>
+    </details>
+
+    <div class="actions">
+      <button type="submit" class="primary" id="startBtn">Конвертировать</button>
+    </div>
+    <div class="err-box" id="formError" hidden></div>
+  </form>
+
+  <section class="card" id="progressCard" hidden>
+    <div class="prog-head">
+      <strong id="progTitle">Сканирую файлы…</strong>
+      <span class="hint" id="progCount"></span>
+    </div>
+    <div class="progress"><div id="bar"></div></div>
+    <div class="current mono" id="current"></div>
+
+    <div class="stats">
+      <div class="stat ok"><div class="v" id="sConverted">0</div><div class="k">сконвертировано</div></div>
+      <div class="stat info"><div class="v" id="sCopied">0</div><div class="k">скопировано</div></div>
+      <div class="stat warn"><div class="v" id="sSkipped">0</div><div class="k">пропущено</div></div>
+      <div class="stat err"><div class="v" id="sErrors">0</div><div class="k">ошибок</div></div>
+    </div>
+
+    <dl class="summary">
+      <dt>Размер до</dt><dd id="sBefore">—</dd>
+      <dt>Размер после</dt><dd id="sAfter">—</dd>
+      <dt>Экономия</dt><dd id="sSaved">—</dd>
+      <dt>Время</dt><dd id="sTime">—</dd>
+    </dl>
+    <div class="err-box" id="jobError" hidden></div>
+
+    <div class="done-actions">
+      <button type="button" id="cancelBtn">Остановить</button>
+      <button type="button" id="revealBtn" hidden>Открыть выходную папку</button>
+    </div>
+
+    <div class="log mono" id="log"></div>
+  </section>
+</main>
+
+<dialog id="browser">
+  <div class="dlg-head">
+    <strong>Выбор исходной папки</strong>
+    <div class="mono" id="dlgPath"></div>
+  </div>
+  <div class="dlg-list" id="dlgList"></div>
+  <div class="dlg-foot">
+    <span class="hint" id="dlgInfo"></span>
+    <button type="button" id="dlgCancel">Отмена</button>
+    <button type="button" class="primary" id="dlgSelect">Выбрать эту папку</button>
+  </div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const el = {
+  form: $('form'), input: $('input'), output: $('output'), resetOutput: $('resetOutput'),
+  quality: $('quality'), qualityRange: $('qualityRange'), qualityHint: $('qualityHint'),
+  effort: $('effort'), lossless: $('lossless'), maxWidth: $('maxWidth'),
+  concurrency: $('concurrency'), cpuHint: $('cpuHint'), formats: $('formats'),
+  skipExisting: $('skipExisting'), keepOriginal: $('keepOriginal'), deleteWarn: $('deleteWarn'),
+  startBtn: $('startBtn'), formError: $('formError'),
+};
+
+let state = { effort: 4, outputTouched: false, startDir: '', job: null };
+
+// ─── Утилиты ───────────────────────────────────────────────
+function formatBytes(bytes) {
+  if (!bytes) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(Math.abs(bytes)) / Math.log(1024));
+  return `${(bytes / 1024 ** i).toFixed(2)} ${u[i]}`;
+}
+function formatDuration(ms) {
+  const t = Math.floor(ms / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  const p = (n) => String(n).padStart(2, '0');
+  if (h) return `${p(h)}:${p(m)}:${p(s)}`;
+  if (m) return `${p(m)}:${p(s)}`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+function setError(box, msg) { box.textContent = msg || ''; box.hidden = !msg; }
+
+// ─── Выходная папка = исходная + "-converted" ────────────
+function defaultOutput(input) {
+  const trimmed = input.trim().replace(/[\/\\]+$/, '');
+  return trimmed ? `${trimmed}-converted` : '';
+}
+function syncOutput() {
+  if (!state.outputTouched) el.output.value = defaultOutput(el.input.value);
+  el.resetOutput.hidden = !state.outputTouched;
+}
+el.input.addEventListener('input', syncOutput);
+el.output.addEventListener('input', () => {
+  state.outputTouched = el.output.value.trim() !== '' && el.output.value !== defaultOutput(el.input.value);
+  el.resetOutput.hidden = !state.outputTouched;
+});
+el.resetOutput.addEventListener('click', () => { state.outputTouched = false; syncOutput(); });
+
+// ─── Качество / effort / lossless ────────────────────────
+el.qualityRange.addEventListener('input', () => { el.quality.value = el.qualityRange.value; });
+el.quality.addEventListener('input', () => { el.qualityRange.value = el.quality.value; });
+function renderEffort() {
+  el.effort.innerHTML = '';
+  for (let i = 0; i <= 6; i++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = i;
+    b.setAttribute('aria-pressed', String(i === state.effort));
+    b.addEventListener('click', () => { state.effort = i; renderEffort(); });
+    el.effort.appendChild(b);
+  }
+}
+function syncLossless() {
+  const on = el.lossless.checked;
+  el.quality.disabled = el.qualityRange.disabled = on;
+  el.qualityHint.hidden = !on;
+}
+el.lossless.addEventListener('change', syncLossless);
+el.keepOriginal.addEventListener('change', () => { el.deleteWarn.hidden = el.keepOriginal.checked; });
+
+// ─── Обзор папок ─────────────────────────────────────────
+const dlg = { box: $('browser'), path: $('dlgPath'), list: $('dlgList'), info: $('dlgInfo'), current: null };
+async function browse(path) {
+  try {
+    const data = await api(`/api/browse?path=${encodeURIComponent(path)}`);
+    dlg.current = data.path;
+    dlg.path.textContent = data.path;
+    dlg.info.textContent = data.images ? `картинок в папке: ${data.images}` : '';
+    dlg.list.innerHTML = '';
+    const add = (label, target, icon) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.innerHTML = `<span>${icon}</span><span></span>`;
+      b.lastChild.textContent = label;
+      b.addEventListener('click', () => browse(target));
+      dlg.list.appendChild(b);
+    };
+    if (data.parent) add('..', data.parent, '↑');
+    for (const d of data.dirs) add(d, `${data.path}/${d}`, '📁');
+    if (!data.dirs.length) {
+      const e = document.createElement('div');
+      e.className = 'empty';
+      e.textContent = 'Нет вложенных папок';
+      dlg.list.appendChild(e);
+    }
+  } catch (err) {
+    dlg.info.textContent = err.message;
+  }
+}
+$('browseBtn').addEventListener('click', () => {
+  dlg.box.showModal();
+  browse(el.input.value.trim() || state.startDir);
+});
+$('dlgCancel').addEventListener('click', () => dlg.box.close());
+$('dlgSelect').addEventListener('click', () => {
+  el.input.value = dlg.current;
+  syncOutput();
+  dlg.box.close();
+});
+
+// ─── Запуск ──────────────────────────────────────────────
+el.form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  setError(el.formError, '');
+  try {
+    await api('/api/convert', {
+      method: 'POST',
+      body: {
+        input: el.input.value.trim(),
+        output: el.output.value.trim() || null,
+        quality: Number(el.quality.value),
+        lossless: el.lossless.checked,
+        effort: state.effort,
+        maxWidth: el.maxWidth.value ? Number(el.maxWidth.value) : null,
+        concurrency: Number(el.concurrency.value),
+        formats: el.formats.value,
+        skipExisting: el.skipExisting.checked,
+        keepOriginal: el.keepOriginal.checked,
+      },
+    });
+  } catch (err) {
+    setError(el.formError, err.message);
+  }
+});
+$('cancelBtn').addEventListener('click', () => api('/api/cancel', { method: 'POST' }));
+$('revealBtn').addEventListener('click', () => {
+  const j = state.job;
+  if (j) api('/api/reveal', { method: 'POST', body: { path: j.output || j.input } }).catch((e) => alert(e.message));
+});
+
+// ─── Отображение прогресса ───────────────────────────────
+const STATUS_ICON = { converted: '✓', copied: '●', skipped: '⊘', error: '✗' };
+const TITLES = {
+  scanning: 'Сканирую файлы…', running: 'Конвертирую…', cancelling: 'Останавливаю…',
+  done: 'Готово', cancelled: 'Остановлено', error: 'Ошибка',
+};
+function renderJob(job) {
+  state.job = job;
+  if (!job) return;
+  const active = ['scanning', 'running', 'cancelling'].includes(job.state);
+  $('progressCard').hidden = false;
+  el.startBtn.disabled = active;
+  el.startBtn.textContent = active ? 'Идёт конвертация…' : 'Конвертировать';
+  $('cancelBtn').hidden = !active;
+  $('cancelBtn').disabled = job.state === 'cancelling';
+  $('revealBtn').hidden = active || job.state === 'error';
+  $('progTitle').textContent = TITLES[job.state] || job.state;
+  setError($('jobError'), job.error);
+
+  const s = job.result || job.last || {};
+  const total = job.scan?.totalWork ?? 0;
+  const processed = (s.converted || 0) + (s.copied || 0) + (s.skipped || 0) + (s.errors || 0);
+  const pct = total ? (processed / total) * 100 : (job.state === 'done' ? 100 : 0);
+  $('bar').style.width = `${pct}%`;
+  $('progCount').textContent = total ? `${processed} / ${total} · ${pct.toFixed(0)}%` : '';
+
+  let currentText = active && s.file ? s.file : '';
+  if (active && processed && s.elapsedMs) {
+    const eta = ((total - processed) * s.elapsedMs) / processed;
+    currentText = `ETA ${formatDuration(eta)} · ${currentText}`;
+  }
+  if (job.state === 'done' && total === 0) currentText = 'В папке не найдено подходящих файлов';
+  $('current').textContent = currentText;
+
+  $('sConverted').textContent = s.converted || 0;
+  $('sCopied').textContent = s.copied || 0;
+  $('sSkipped').textContent = s.skipped || 0;
+  $('sErrors').textContent = s.errors || 0;
+  $('sBefore').textContent = s.bytesBefore ? formatBytes(s.bytesBefore) : '—';
+  $('sAfter').textContent = s.bytesBefore ? formatBytes(s.bytesAfter) : '—';
+  const saved = (s.bytesBefore || 0) - (s.bytesAfter || 0);
+  const savedEl = $('sSaved');
+  savedEl.textContent = s.bytesBefore ? `${formatBytes(saved)} (${((saved / s.bytesBefore) * 100).toFixed(1)}%)` : '—';
+  savedEl.className = s.bytesBefore && saved > 0 ? 'saved' : '';
+  $('sTime').textContent = s.elapsedMs ? formatDuration(s.elapsedMs) : '—';
+
+  const log = $('log');
+  log.innerHTML = '';
+  for (const r of job.recent || []) {
+    const row = document.createElement('div');
+    row.className = r.status;
+    row.innerHTML = '<span class="st"></span><span class="f"></span>';
+    row.firstChild.textContent = STATUS_ICON[r.status] || '·';
+    row.lastChild.textContent = r.file;
+    log.appendChild(row);
+  }
+  log.hidden = !log.childElementCount;
+}
+
+// ─── Инициализация ───────────────────────────────────────
+(async function init() {
+  const { defaults: d, cpus, startDir, job } = await api('/api/defaults');
+  state.startDir = startDir;
+  el.quality.value = el.qualityRange.value = d.quality;
+  state.effort = d.effort;
+  el.lossless.checked = d.lossless;
+  el.maxWidth.value = d.maxWidth ?? '';
+  el.concurrency.value = d.concurrency;
+  el.cpuHint.textContent = `ядер: ${cpus}`;
+  el.formats.value = d.formats;
+  el.skipExisting.checked = d.skipExisting;
+  el.keepOriginal.checked = d.keepOriginal;
+  renderEffort();
+  syncLossless();
+  syncOutput();
+  if (job) {
+    el.input.value = job.input;
+    state.outputTouched = job.output !== defaultOutput(job.input);
+    el.output.value = job.output || '';
+    el.resetOutput.hidden = !state.outputTouched;
+    renderJob(job);
+  }
+  const es = new EventSource('/api/events');
+  es.addEventListener('job', (e) => renderJob(JSON.parse(e.data)));
+})().catch((err) => setError(el.formError, `Сервер недоступен: ${err.message}`));
+</script>
+</body>
+</html>

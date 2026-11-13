@@ -9,6 +9,19 @@
    node src/index.js -i images/{folder_with_images} -o images/{folder_with_images}-webp --quality 90 --effort 4
    ```
 
+## Web UI
+
+```bash
+npm run ui
+```
+
+Откройте <http://localhost:5173> (порт меняется через `PORT=8080 npm run ui`). Сервер слушает только `127.0.0.1`.
+
+- Исходную папку можно вписать путём или выбрать через «Обзор…» (по умолчанию открывается `images/`).
+- Выходная папка подставляется автоматически: `<исходная>-converted`. Её можно отредактировать вручную.
+- Качество по умолчанию — `90`, остальные параметры по умолчанию такие же, как у CLI.
+- Прогресс, статистика и лог файлов обновляются в реальном времени, конвертацию можно остановить.
+
 ## Возможности
 
 - Рекурсивный обход директорий с сохранением структуры папок
@@ -135,8 +148,12 @@ node src/index.js -i ./photos -o ./photos-webp --skip-existing false
 ├── package.json
 ├── README.md
 ├── .gitignore
-└── src/
-    └── index.js   # CLI и логика конвертации
+├── src/
+│   ├── core.js    # логика конвертации (общая для CLI и UI)
+│   ├── index.js   # CLI
+│   └── server.js  # HTTP-сервер для Web UI
+└── web/
+    └── index.html # Web UI
 ```
 
 ## Подсказки по `quality` и `effort`

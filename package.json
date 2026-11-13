@@ -9,7 +9,8 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "convert": "node src/index.js"
+    "convert": "node src/index.js",
+    "ui": "node src/server.js"
   },
   "engines": {
     "node": ">=18.0.0"
